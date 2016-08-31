@@ -73,8 +73,10 @@ class LogAuditing
 
         $retorno = [];
         foreach( $TRACE AS $key => $label ) {
-            $retorno[] = $TRACE[$key];
-            break;
+            if($TRACE[$key]['class'] != 'Ufox\LogAuditing') {
+                $retorno[] = $TRACE[$key];
+                break;
+            }
         }
 
         $file  = ( isset( $retorno[0]['file'] ) ? $retorno[0]['file'] : '' ) . ':' . ( isset( $retorno[0]['line'] ) ? $retorno[0]['line'] : '' );
