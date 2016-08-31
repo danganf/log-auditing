@@ -2,87 +2,84 @@
 
 namespace Ufox;
 
+/*
+variavel sessao => login_usuario_logado
+*/
 class LogAuditing
 {
-    public function getUrl($apiName){
-        $retorno = $this->curl( config('app.url_api_center').$apiName.'/'.config('app.env') );
-        return $retorno['url'];
-    }
+    private $dados = [];
 
-    private function parseReturn( $jsonString ){
-
-        $json = json_decode( $jsonString, TRUE );
-        $retorno = FALSE;
-        if( !isset( $json['error'] ) ) {
-            $retorno = $json;
-        }
-        return $retorno;
-
-    }
-
-    private function curl ($url, array $options = [])
+    public function __construct()
     {
-        $timeout           = 5;
-        $connectionTimeout = 3;
+        $this->dados['trace']         = base_convert( rand(100000000,999999999) ,20,36);
+        $this->dados['login_name']    = \Session::get('login_usuario_logado');
+        $this->dados['origem']        = $_SERVER['HTTP_HOST'];
+        $this->dados['evento']        = null;
+        $this->dados['ip']            = null;
+        $this->dados['path_arquivo']  = null;
+        $this->dados['dados_request'] = null;
+    }
 
-        $ch = curl_init();
+    public function login(){
+        $this->dados['evento'] = 'LOGON';
+        $this->send();
+    }
 
-        if (count($options) > 0) {
+    public function logon(){
+        $this->dados['evento'] = 'LOGOFF';
+        $this->send();
+    }
 
-            if (!empty($options['timeout']))
-                $timeout = $options['timeout'];
+    public function event($arrayValores=null){
 
-            if (!empty($options['connectionTimeout']))
-                $connectionTimeout = $options['connectionTimeout'];
+        $this->dados['evento']       = 'SYSTEM';
+        $this->dados['evento_dados'] = $arrayValores;
+        $this->send();
+    }
 
-            if (!empty($options['header'])) {
-                if (is_array($options['header'])) {
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, $options['header']);
-                } else {
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, array($options['header']));
-                }
+    public function error($arrayValores=null){
+        $this->dados['evento']       = 'ERROR';
+        $this->dados['evento_dados'] = $arrayValores;
+        $this->send();
+    }
+
+    private function send(){
+        $this->setRequest();
+        $this->setTrace();
+        return \ApiCenter::saveLogAuditing( $this->dados );
+    }
+
+    private function setRequest(){
+
+        $this->dados['ip']            = implode(',',\Request::getClientIps());
+        $this->dados['dados_request'] = [
+            'URI_FULL' => \Request::getUri(),
+            'REFER'    => ( isset( $_SERVER['HTTP_X_ALT_REFERER'] ) ? $_SERVER['HTTP_X_ALT_REFERER'] : ( isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : \Request::server('HTTP_REFERER') ) ),
+            'URI'      => \Request::getRequestUri(),
+            'METHOD'   => \Request::getMethod(),
+        ];
+    }
+
+    private function setTrace(){
+        $TRACE = debug_backtrace();
+        foreach( $TRACE AS $key => $label ) {
+
+            #eliminar a chamada da facades
+            if( isset( $label['file'] ) && strpos( $label['file'], 'Facades' ) !== FALSE ) {
+                unset($TRACE[$key]);
             }
 
-            if (!empty($options['method']))
-                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $options['method']);
-
-            if (!empty($options['post']))
-                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-
-            if (!empty($options['data']))
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $options['data']);
-
-            if (!empty($options['json'])) {
-                $dados[] = 'Content-Type: application/json';
-                $dados[] = 'Content-Length: ' . strlen($options['data']);
-            }
-
-            if ( !empty( $options['backend'] ) ) {
-                $dados[] = 'api-token: '.config('app.api_token');
-                if( !is_bool( $options['backend'] ) ) {
-                    $dados[] = 'session-id: '.$options['backend'];
-                }
-            }
-
-            if( isset( $dados ) ){
-                curl_setopt($ch, CURLOPT_HTTPHEADER, $dados);
-            }
         }
 
-        $refer = ( isset( $_SERVER['HTTP_X_ALT_REFERER'] ) ? $_SERVER['HTTP_X_ALT_REFERER'] : ( isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : \Request::server('HTTP_REFERER') ) );
-
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectionTimeout);
-        curl_setopt($ch, CURLOPT_REFERER, $refer );
-
-        $result = curl_exec($ch);
-        if( strpos($url,'get-url-api') === FALSE ) {
-            //var_dump($url.' > '.$result);
+        $retorno = [];
+        foreach( $TRACE AS $key => $label ) {
+            $retorno[] = $TRACE[$key];
+            break;
         }
-        curl_close($ch);
 
-        return $this->parseReturn( $result );
+        $file  = ( isset( $retorno[0]['file'] ) ? $retorno[0]['file'] : '' ) . ':' . ( isset( $retorno[0]['line'] ) ? $retorno[0]['line'] : '' );
+        $file  = ( $file != ':' ? $file : ( isset( $retorno[0]['class'] ) ? $retorno[0]['class'] : '' ) );
+
+        $this->dados['path_arquivo'] = $file;
     }
 }

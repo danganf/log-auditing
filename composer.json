@@ -11,7 +11,8 @@
     ],
     "require": {
         "php": ">=5.3,<8.0-DEV",
-		"laravel/framework": "5.*"
+		"laravel/framework": "5.*",
+        "ufox/api-center": "^1.1"
     },
     "autoload": {
         "psr-4": {"Ufox\\": "src/"}
